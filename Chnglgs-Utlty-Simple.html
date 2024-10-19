@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JIRA ID Extractor</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+
+        <div class="form-group">
+            <label for="changelog">Upload Changelog File (changelog.txt):</label>
+            <input type="file" class="form-control" id="changelog" accept=".txt">
+        </div>
+        <button class="btn btn-primary" onclick="processFiles()">Process File</button>
+        <div id="errorDisplay" class="alert alert-danger mt-3" style="display: none;"></div>
+        <textarea id="output" class="form-control mt-3" rows="5" placeholder="Output will be displayed here..." readonly></textarea>
+        <div id="countDisplay" class="mt-2" style="display: none;"></div>
+        <button class="btn btn-success mt-2" id="exportBtn" style="display: none;" onclick="exportToExcel()">Export to Excel</button>
+        <button class="btn btn-info mt-2" id="showProjectsBtn" style="display: none;" onclick="showProjects()">Show Projects</button>
+        <button class="btn btn-warning mt-2" id="showExceptionsBtn" style="display: none;" onclick="showExceptions()">Show Exceptions</button>
+    </div>
+
+    <!-- Projects Modal -->
+    <div class="modal fade" id="projectsModal" tabindex="-1" role="dialog" aria-labelledby="projectsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="projectsModalLabel">Project Keys</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="projectsList" rows="10" style="width: 100%;" readonly></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Exceptions Modal -->
+    <div class="modal fade" id="exceptionsModal" tabindex="-1" role="dialog" aria-labelledby="exceptionsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exceptionsModalLabel">Exceptions</h5>
+                    <button type="button" class="close" data-dismiss="true" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="exceptionsList" rows="10" style="width: 100%;" readonly></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div class="modal fade" id="logsModal" tabindex="-1" role="dialog" aria-labelledby="logsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logsModalLabel">Logs</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="logsList" rows="10" style="width: 100%;" readonly></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let uploadedFileName = "";
+        let projectKeysList = []; // Store project keys for later use
+        let exceptionsList = []; // Store exceptions for later display
+        let jiraIdsForExport = []; // Store JIRA IDs for export
+
+        // Function to show error messages
+        function showError(message) {
+            const errorDiv = document.getElementById('errorDisplay');
+            errorDiv.innerText = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Function to show logs in the modal
+        function showLogs(logs) {
+            const logsTextArea = document.getElementById('logsList');
+            logsTextArea.value = logs.join('\n'); // Display logs in textarea
+            $('#logsModal').modal('show'); // Show the modal
+        }
+
+        function processFiles() {
+            const changelogFile = document.getElementById('changelog').files[0];
+
+            // Check file extension
+            if (!changelogFile || changelogFile.name.split('.').pop() !== 'txt') {
+                showError("Please upload a valid changelog.txt file.");
+                return;
+            }
+
+            // Store the original file name (without extension) for later use in the export function
+            uploadedFileName = changelogFile.name.split('.').slice(0, -1).join('.');
+
+            // Fetch the changelog file and project keys from the JIRA API
+            const changelogPromise = readFile(changelogFile);
+            const projectsPromise = fetchProjectsFromJira();
+
+            Promise.all([changelogPromise, projectsPromise]).then(files => {
+                const changelogText = files[0];
+                projectKeysList = files[1]; // Store project keys for later
+
+                if (!projectKeysList.length) {
+                    showError("No project keys found in the JIRA API.");
+                    return;
+                }
+
+                // Update Show Projects and Show Exceptions button visibility
+                document.getElementById('showProjectsBtn').style.display = 'block';
+                document.getElementById('showExceptionsBtn').style.display = 'block';
+
+                // Perform parsing
+                const { jiraIds, exceptions, logs } = extractJiraIds(changelogText, projectKeysList);
+
+                // Output the result as comma-separated values
+                document.getElementById('output').value = jiraIds.join(', ');
+                jiraIdsForExport = jiraIds; // Store JIRA IDs for export
+                exceptionsList = exceptions; // Store exceptions for later use
+                document.getElementById('countDisplay').innerText = `Total JIRA IDs found: ${jiraIds.length}`;
+                document.getElementById('countDisplay').style.display = 'block';
+
+                // Show logs
+                showLogs(logs);
+
+                // Prepare the export button
+                document.getElementById('exportBtn').style.display = 'block';
+            }).catch(error => {
+                showError("An error occurred while processing files.");
+                console.error(error);
+            });
+        }
+
+        // Function to read the uploaded changelog file
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    resolve(event.target.result);
+                };
+                reader.onerror = (error) => {
+                    reject(error);
+                };
+                reader.readAsText(file);
+            });
+        }
+
+        // Function to fetch project keys from JIRA API
+        function fetchProjectsFromJira() {
+            return new Promise((resolve, reject) => {
+                fetch("https://jira.demo.almworks.com/rest/api/2/project")
+                    .then(response => response.json())
+                    .then(data => {
+                        // Extract project keys from the response
+                        const projectKeys = data.map(project => project.key).filter(key => key); // Filter out any null values
+                        resolve(projectKeys);
+                    })
+                    .catch(error => {
+                        showError("Error fetching project keys from JIRA API.");
+                        console.error("Error fetching projects:", error);
+                        reject(error);
+                    });
+            });
+        }
+
+        // Function to extract JIRA IDs from the changelog text
+        function extractJiraIds(changelogText, projectKeys) {
+            const jiraIds = new Set();
+            const exceptions = [];
+            const logs = [];
+            const regex = new RegExp(`\\b(${projectKeys.join('|')})-\\d+\\b`, 'gi'); // Match project key followed by dash and number
+
+            // Split the changelog text into lines
+            const lines = changelogText.split('\n');
+            lines.forEach((line, index) => {
+                logs.push(`Processing line ${index + 1}: ${line}`); // Log each line processed with line number
+                const matches = line.match(regex);
+                if (matches) {
+                    matches.forEach(match => {
+                        jiraIds.add(match);
+                    });
+                }
+
+                // Check for exceptions (whitespace or other issues)
+                const whitespaceRegex = new RegExp(`\\b(${projectKeys.join('|')})\\b`, 'gi');
+                const words = line.split(/\s+/);
+                words.forEach(word => {
+                    const trimmedWord = word.trim(); // Trim whitespace
+                    if (whitespaceRegex.test(trimmedWord) && !regex.test(trimmedWord)) {
+                        exceptions.push(`Line ${index + 1}: ${trimmedWord}`); // Add word to exceptions if it matches project key but is not followed by a number
+                    }
+                });
+            });
+
+            return {
+                jiraIds: Array.from(jiraIds),
+                exceptions,
+                logs
+            };
+        }
+
+        // Function to export the result to an Excel file
+        function exportToExcel() {
+            const worksheet = XLSX.utils.json_to_sheet(jiraIdsForExport.map(id => ({ "JIRA ID": id })));
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "JIRA IDs");
+            const excelFileName = `Output_${uploadedFileName}.xlsx`;
+            XLSX.writeFile(workbook, excelFileName);
+        }
+
+        // Function to show the list of projects in a modal
+        function showProjects() {
+            const projectsTextArea = document.getElementById('projectsList');
+            projectsTextArea.value = projectKeysList.join(', '); // Display project keys
+            $('#projectsModal').modal('show'); // Show the modal
+        }
+
+        // Function to show exceptions in a modal
+        function showExceptions() {
+            const exceptionsTextArea = document.getElementById('exceptionsList');
+            exceptionsTextArea.value = exceptionsList.join('\n'); // Display exceptions
+            $('#exceptionsModal').modal('show'); // Show the modal
+        }
+    </script>
+</body>
+</html>
