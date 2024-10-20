@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Project Processor</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <style>
+        .exception-blink {
+            animation: blinker 1s linear infinite;
+        }
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+        .modal-content {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div id="jira-status" class="text-right mb-3"></div>
+
+        <div class="form-group">
+            <label for="changelog">Import Changelog (TXT only):</label>
+            <input type="file" id="changelog" class="form-control-file" accept=".txt">
+            <div id="file-error" class="text-danger" style="display: none;">Please upload a valid TXT file</div>
+        </div>
+
+        <button id="start-processing" class="btn btn-primary">Start Processing</button>
+        
+        <div id="buttons" style="display: none;">
+            <button id="show-projects" class="btn btn-secondary">Show Projects</button>
+            <button id="show-exceptions" class="btn btn-danger">Show Exceptions</button>
+            <button id="show-logs" class="btn btn-info">Show Logs</button>
+            <button id="export-excel" class="btn btn-success">Export to Excel</button>
+        </div>
+        
+        <div id="total-jira-ids" class="mt-3">Total JIRA IDs found:</div>
+        <textarea id="output" class="form-control mt-3" rows="10" readonly></textarea>
+        
+        <!-- Modals -->
+        <div class="modal" id="projectsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Projects</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <textarea class="form-control" rows="10" id="projects-list" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="exceptionsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Exceptions</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <textarea class="form-control" rows="10" id="exceptions-list" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="logsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Logs</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <textarea class="form-control" rows="10" id="logs-list" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let projectKeys = [];
+        let exceptions = [];
+        let logs = [];
+
+        function checkJiraLogin() {
+            fetch('https://jira.demo.almworks.com/rest/api/2/myself', {
+                method: 'GET',
+                credentials: 'include',  // Ensures the cookies are sent
+            })
+            .then(response => {
+                if (response.status === 200) {
+                    document.getElementById("jira-status").innerHTML = '<span style="color:green;">Connected to Jira for projects</span>';
+                    fetchProjects();
+                } else {
+                    document.getElementById("jira-status").innerHTML = '<span style="color:red;">Error connecting to Jira</span>';
+                }
+            })
+            .catch(error => {
+                document.getElementById("jira-status").innerHTML = '<span style="color:red;">Error connecting to Jira</span>';
+                console.error('Error connecting to Jira:', error);
+            });
+        }
+
+        function fetchProjects() {
+            fetch('https://jira.demo.almworks.com/rest/api/2/project', {
+                method: 'GET',
+                credentials: 'include',
+            })
+            .then(response => response.json())
+            .then(data => {
+                projectKeys = data.map(project => project.key.toUpperCase() + '-');
+                console.log('Project Keys:', projectKeys);
+            })
+            .catch(error => {
+                console.error('Error fetching projects:', error);
+            });
+        }
+
+        document.getElementById('start-processing').addEventListener('click', function () {
+            const fileInput = document.getElementById('changelog');
+            const file = fileInput.files[0];
+            const outputArea = document.getElementById('output');
+            const fileError = document.getElementById('file-error');
+            
+            if (!file || file.type !== "text/plain") {
+                fileError.style.display = "block";
+                setTimeout(() => {
+                    fileError.style.display = "none";
+                }, 5000);
+                return;
+            }
+
+            fileError.style.display = "none";
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const changelog = e.target.result.split('\n');
+                processChangelog(changelog);
+            };
+            reader.readAsText(file);
+        });
+
+        function processChangelog(lines) {
+            let foundJiraIds = new Set();
+            logs = [];
+            exceptions = [];
+            
+            lines.forEach((line, index) => {
+                const lineNumber = index + 1;
+                logs.push(`Processing line ${lineNumber}: ${line}`);
+                const words = line.split(/\s+/);
+
+                words.forEach(word => {
+                    word = word.trim();
+                    if (isValidJiraId(word)) {
+                        foundJiraIds.add(word.toUpperCase());
+                    } else if (isException(word)) {
+                        exceptions.push(`Line ${lineNumber}: ${word}`);
+                        logs.push(`Processing line ${lineNumber}: ${word} <span style="color:red;">(Exception)</span>`);
+                    }
+                });
+            });
+
+            updateOutput(foundJiraIds);
+            updateButtons(foundJiraIds.size > 0);
+        }
+
+        function isValidJiraId(word) {
+            return projectKeys.some(key => word.toUpperCase().startsWith(key));
+        }
+
+        function isException(word) {
+            return projectKeys.some(key => word.toUpperCase().startsWith(key.replace('-', '')));
+        }
+
+        function updateOutput(jiraIds) {
+            const outputArea = document.getElementById('output');
+            outputArea.value = Array.from(jiraIds).join(', ');
+        }
+
+        function updateButtons(enable) {
+            document.getElementById('buttons').style.display = enable ? 'block' : 'none';
+        }
+
+        document.getElementById('show-projects').addEventListener('click', function () {
+            document.getElementById('projects-list').value = projectKeys.join(', ');
+            $('#projectsModal').modal('show');
+        });
+
+        document.getElementById('show-exceptions').addEventListener('click', function () {
+            document.getElementById('exceptions-list').value = exceptions.join('\n');
+            $('#exceptionsModal').modal('show');
+        });
+
+        document.getElementById('show-logs').addEventListener('click', function () {
+            document.getElementById('logs-list').innerHTML = logs.join('\n');
+            $('#logsModal').modal('show');
+        });
+
+        // Start by checking Jira login
+        checkJiraLogin();
+    </script>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+</body>
+</html>
