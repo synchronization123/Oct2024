@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tab Navigation with Beautiful UI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+        .navbar {
+            background-color: #4CAF50;
+            overflow: hidden;
+        }
+        .navbar a {
+            float: left;
+            display: block;
+            color: white;
+            text-align: center;
+            padding: 14px 20px;
+            text-decoration: none;
+            font-size: 17px;
+        }
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+        .content {
+            padding: 20px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .active {
+            display: block;
+        }
+        iframe {
+            width: 100%;
+            height: 80vh;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navigation Menu -->
+    <div class="navbar">
+        <a href="#" class="tab-link" data-target="tab1">Tab 1</a>
+        <a href="#" class="tab-link" data-target="tab2">Tab 2</a>
+        <a href="#" class="tab-link" data-target="tab3">Tab 3</a>
+        <a href="#" class="tab-link" data-target="tab4">Tab 4</a>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content">
+        <div id="tab1" class="tab-content active">
+            <iframe src="https://example.com"></iframe> <!-- Change URL here -->
+        </div>
+        <div id="tab2" class="tab-content">
+            <iframe src="https://example2.com"></iframe> <!-- Change URL here -->
+        </div>
+        <div id="tab3" class="tab-content">
+            <iframe src="https://example3.com"></iframe> <!-- Change URL here -->
+        </div>
+        <div id="tab4" class="tab-content">
+            <iframe src="https://example4.com"></iframe> <!-- Change URL here -->
+        </div>
+    </div>
+
+    <script>
+        const tabs = document.querySelectorAll('.tab-link');
+        const contents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = tab.getAttribute('data-target');
+
+                contents.forEach(content => {
+                    content.classList.remove('active');
+                });
+
+                document.getElementById(target).classList.add('active');
+            });
+        });
+    </script>
+
+</body>
+</html>
