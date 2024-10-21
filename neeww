@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stylish Tabs with Gray Theme</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            background-color: #333;
+            padding: 15px;
+            text-align: center;
+            color: white;
+        }
+        .tabs {
+            display: flex;
+            justify-content: center;
+            background-color: #444;
+        }
+        .tab {
+            padding: 15px 30px;
+            cursor: pointer;
+            color: white;
+            background-color: #555;
+            margin: 0 5px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        .tab:hover {
+            background-color: #777;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            margin: 20px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Gray-Themed Tab Navigation</h1>
+    </div>
+
+    <div class="tabs">
+        <div class="tab" onclick="showTab(0)">Tab 1</div>
+        <div class="tab" onclick="showTab(1)">Tab 2</div>
+        <div class="tab" onclick="showTab(2)">Tab 3</div>
+        <div class="tab" onclick="showTab(3)">Tab 4</div>
+    </div>
+
+    <div class="tab-content" id="tab-0">
+        <h2>Content for Tab 1</h2>
+        <p>This is where you can add details for Tab 1. You can include text, images, or any other HTML elements here.</p>
+        <a href="http://example.com" target="_blank">Open URL in New Tab</a>
+    </div>
+
+    <div class="tab-content" id="tab-1">
+        <h2>Content for Tab 2</h2>
+        <p>This is where you can add details for Tab 2. You can include text, images, or any other HTML elements here.</p>
+        <a href="http://example.com" target="_blank">Open URL in New Tab</a>
+    </div>
+
+    <div class="tab-content" id="tab-2">
+        <h2>Content for Tab 3</h2>
+        <p>This is where you can add details for Tab 3. You can include text, images, or any other HTML elements here.</p>
+        <a href="http://example.com" target="_blank">Open URL in New Tab</a>
+    </div>
+
+    <div class="tab-content" id="tab-3">
+        <h2>Content for Tab 4</h2>
+        <p>This is where you can add details for Tab 4. You can include text, images, or any other HTML elements here.</p>
+        <a href="http://example.com" target="_blank">Open URL in New Tab</a>
+    </div>
+
+    <script>
+        function showTab(index) {
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach((content, idx) => {
+                if (idx === index) {
+                    content.classList.add('active');
+                } else {
+                    content.classList.remove('active');
+                }
+            });
+        }
+
+        // Show the first tab by default
+        showTab(0);
+    </script>
+
+</body>
+</html>
