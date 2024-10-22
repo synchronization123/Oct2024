@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JIRA Changelog Parser</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+    <style>
+        .modal-body {
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #statusMessage {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .blink {
+            animation: blink-animation 1s steps(5, start) infinite;
+        }
+        @keyframes blink-animation {
+            to {
+                visibility: hidden;
+            }
+        }
+        .exception {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>JIRA Changelog Parser</h1>
+        <div id="statusMessage"></div>
+        <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+        <input type="file" id="changelogInput" accept=".txt" class="form-control mb-2">
+        <button class="btn btn-primary" onclick="processChangelog()">Start Processing</button>
+        
+        <div id="resultsContainer" style="display: none;">
+            <button class="btn btn-success" id="exportButton" disabled onclick="exportToExcel()">Export to Excel</button>
+            <button class="btn btn-info" onclick="showProjectsModal()">Show Projects</button>
+            <button id="exceptionsButton" class="btn btn-warning" onclick="showExceptionsModal()">Show Exceptions</button>
+            <button class="btn btn-secondary" id="logsButton" onclick="showLogsModal()">Show Logs</button>
+            <h5>Total JIRA IDs found: <span id="totalCount">0</span></h5>
+        </div>
+        
+        <textarea id="outputArea" class="form-control" rows="10" readonly></textarea>
+        <div id="copyMessage" class="alert alert-success mt-2" style="display: none;">Copied to clipboard!</div>
+    </div>
+
+    <!-- Modal for Projects -->
+    <div class="modal fade" id="projectsModal" tabindex="-1" role="dialog" aria-labelledby="projectsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="projectsModalLabel">Projects</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="projectsContent"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Exceptions -->
+    <div class="modal fade" id="exceptionsModal" tabindex="-1" role="dialog" aria-labelledby="exceptionsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exceptionsModalLabel">Exceptions</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="exceptionsContent"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Logs -->
+    <div class="modal fade" id="logsModal" tabindex="-1" role="dialog" aria-labelledby="logsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logsModalLabel">Logs</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="logsContent"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let projectKeys = [];
+        let jiraIDs = new Set();
+        let exceptions = [];
+        let logs = [];
+
+        // Fetch project keys from the data.txt file instead of JIRA API
+        async function fetchProjects() {
+            try {
+                const response = await fetch('http://localhost/oct2024/data.txt');
+                if (!response.ok) throw new Error('Error fetching data.txt file');
+                const text = await response.text();
+                projectKeys = text.split('\n').map(key => key.trim() + '-').filter(key => key.length > 1);
+                displayStatusMessage('Fetched project keys from data.txt', 'success');
+            } catch (error) {
+                displayStatusMessage('Error fetching project keys', 'danger');
+            }
+        }
+
+        // Display status message
+        function displayStatusMessage(message, type) {
+            const statusMessageDiv = document.getElementById('statusMessage');
+            statusMessageDiv.innerHTML = `<div class="alert alert-${type}" role="alert">${message}</div>`;
+            setTimeout(() => {
+                statusMessageDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        // Process the changelog file
+        async function processChangelog() {
+            const changelogInput = document.getElementById('changelogInput').files[0];
+            if (!changelogInput || changelogInput.type !== 'text/plain') {
+                displayErrorMessage('Please upload a valid .txt file.');
+                return;
+            }
+
+            const text = await changelogInput.text();
+            const lines = text.split('\n');
+            const regex = new RegExp(`\\b(${projectKeys.join('|').replace(/-/g, '\\-')})(\\d+)\\b`, 'i');
+
+            exceptions = [];
+            jiraIDs.clear();
+            logs = [];
+            let lineNumber = 0;
+
+            lines.forEach(line => {
+                lineNumber++;
+                const originalLine = line.trim();
+                let lineLog = `Processing line ${lineNumber}: ${originalLine}`;
+
+                const words = originalLine.split(/[\s,]+/);
+                let foundException = false;
+                let alreadyLoggedExceptions = new Set();
+
+                words.forEach(word => {
+                    const match = regex.exec(word);
+                    if (match) {
+                        jiraIDs.add(match[0]);
+                    } else {
+                        projectKeys.forEach(key => {
+                            const upperKey = key.trim().toUpperCase();
+                            const upperWord = word.trim().toUpperCase();
+                            if (upperWord.startsWith(upperKey) && upperWord.length > upperKey.length) {
+                                const exceptionMessage = `Line ${lineNumber}: ${word} (matches project key but not a valid JIRA ID)`;
+                                if (!alreadyLoggedExceptions.has(exceptionMessage)) {
+                                    exceptions.push(exceptionMessage);
+                                    alreadyLoggedExceptions.add(exceptionMessage);
+                                    foundException = true;
+                                }
+                            }
+                            if (upperWord.includes(upperKey.replace('-', ''))) {
+                                const exceptionMessage = `Line ${lineNumber}: ${word} (matches project key without hyphen)`;
+                                if (!alreadyLoggedExceptions.has(exceptionMessage)) {
+                                    exceptions.push(exceptionMessage);
+                                    alreadyLoggedExceptions.add(exceptionMessage);
+                                    foundException = true;
+                                }
+                            }
+                        });
+                    }
+                });
+
+                if (foundException) {
+                    lineLog += ' <span class="exception">(Exception)</span>';
+                }
+
+                logs.push(lineLog);
+            });
+
+            const output = Array.from(jiraIDs).join(', ');
+            document.getElementById('outputArea').value = output || 'No JIRA IDs found';
+            document.getElementById('totalCount').innerText = jiraIDs.size;
+
+            document.getElementById('resultsContainer').style.display = 'block';
+            document.getElementById('exportButton').disabled = jiraIDs.size === 0;
+            
+document.getElementById('exceptionsButton').disabled = exceptions.length === 0;
+            document.getElementById('logsButton').disabled = logs.length === 0;
+        }
+
+        // Export to Excel functionality
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet([["JIRA IDs"], ...Array.from(jiraIDs).map(id => [id])]);
+            XLSX.utils.book_append_sheet(wb, ws, "JIRA IDs");
+            XLSX.writeFile(wb, "jira_ids.xlsx");
+        }
+
+        // Show Projects Modal
+        function showProjectsModal() {
+            const projectsContent = document.getElementById('projectsContent');
+            projectsContent.innerHTML = projectKeys.length > 0
+                ? projectKeys.join('<br>')
+                : 'No project keys found';
+            $('#projectsModal').modal('show');
+        }
+
+        // Show Exceptions Modal
+        function showExceptionsModal() {
+            const exceptionsContent = document.getElementById('exceptionsContent');
+            exceptionsContent.innerHTML = exceptions.length > 0
+                ? exceptions.join('<br>')
+                : 'No exceptions found';
+            $('#exceptionsModal').modal('show');
+        }
+
+        // Show Logs Modal
+        function showLogsModal() {
+            const logsContent = document.getElementById('logsContent');
+            logsContent.innerHTML = logs.length > 0
+                ? logs.join('<br>')
+                : 'No logs found';
+            $('#logsModal').modal('show');
+        }
+
+        // Display error message
+        function displayErrorMessage(message) {
+            const errorMessageDiv = document.getElementById('errorMessage');
+            errorMessageDiv.innerText = message;
+            errorMessageDiv.style.display = 'block';
+            setTimeout(() => {
+                errorMessageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Copy to clipboard functionality (optional)
+        function copyToClipboard() {
+            const outputArea = document.getElementById('outputArea');
+            outputArea.select();
+            document.execCommand('copy');
+            document.getElementById('copyMessage').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('copyMessage').style.display = 'none';
+            }, 2000);
+        }
+
+        // Initialize: Fetch project keys from the data.txt file on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await fetchProjects();
+        });
+    </script>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
