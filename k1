@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JIRA ID Processor</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.3/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>JIRA ID Processor</h1>
+
+        <div class="form-group">
+            <label for="changelogInput">Upload Changelog File</label>
+            <input type="file" class="form-control" id="changelogInput" accept=".txt,.log">
+        </div>
+
+        <button class="btn btn-primary" id="processButton" onclick="processChangelog()">Process Changelog</button>
+        <button class="btn btn-success" id="exportButton" disabled onclick="exportToExcel()">Export JIRA IDs to Excel</button>
+        <button class="btn btn-info" id="projectsButton" disabled onclick="showProjectsModal()">View Projects</button>
+        <button class="btn btn-warning" id="exceptionsButton" disabled onclick="showExceptionsModal()">View Exceptions</button>
+        <button class="btn btn-secondary" id="logsButton" disabled onclick="showLogsModal()">View Logs</button>
+
+        <div class="mt-3" id="errorMessage" style="display: none; color: red;"></div>
+
+        <!-- Modals for displaying content -->
+        <div class="modal fade" id="projectsModal" tabindex="-1" role="dialog" aria-labelledby="projectsModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="projectsModalLabel">Project Keys</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="projectsContent"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="exceptionsModal" tabindex="-1" role="dialog" aria-labelledby="exceptionsModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="exceptionsModalLabel">Exceptions</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="exceptionsContent"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="logsModal" tabindex="-1" role="dialog" aria-labelledby="logsModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="logsModalLabel">Logs</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="logsContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let projectKeys = [];
+        let jiraIDs = new Set();
+        let exceptions = [];
+        let logs = [];
+        let inputFileName = '';
+
+        // Fetch project keys from data.txt file
+        async function fetchProjects() {
+            try {
+                const response = await fetch('http://localhost/oct2024/data.txt');
+                const data = await response.text();
+                projectKeys = data.split(/\r?\n/).map(key => key.trim()).filter(key => key);
+                document.getElementById('projectsButton').disabled = projectKeys.length === 0;
+            } catch (error) {
+                displayErrorMessage('Error fetching project keys: ' + error.message);
+            }
+        }
+
+        // Process uploaded changelog
+        function processChangelog() {
+            const changelogInput = document.getElementById('changelogInput').files[0];
+            if (!changelogInput) {
+                displayErrorMessage('Please upload a changelog file.');
+                return;
+            }
+
+            inputFileName = changelogInput.name.split('.')[0];  // Extract input file name without extension
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const fileContent = e.target.result.split(/\r?\n/);
+                jiraIDs.clear();
+                exceptions = [];
+                logs = [];
+
+                fileContent.forEach(line => {
+                    const words = line.split(/\s+/);
+                    words.forEach(word => {
+                        if (projectKeys.some(key => word.startsWith(key + "-") && /\d+$/.test(word))) {
+                            jiraIDs.add(word);
+                        } else if (projectKeys.some(key => word.startsWith(key))) {
+                            exceptions.push(word);
+                        }
+                    });
+                    logs.push(`Processed line: ${line}`);
+                });
+
+                document.getElementById('exportButton').disabled = jiraIDs.size === 0;
+                document.getElementById('exceptionsButton').disabled = exceptions.length === 0;
+                document.getElementById('logsButton').disabled = logs.length === 0;
+            };
+            reader.readAsText(changelogInput);
+        }
+
+        // Export to Excel with same name as input file
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet([["JIRA IDs"], ...Array.from(jiraIDs).map(id => [id])]);
+            XLSX.utils.book_append_sheet(wb, ws, "JIRA IDs");
+            XLSX.writeFile(wb, inputFileName + ".xlsx");
+        }
+
+        // Show Projects Modal
+        function showProjectsModal() {
+            const projectsContent = document.getElementById('projectsContent');
+            projectsContent.innerHTML = projectKeys.length > 0
+                ? projectKeys.join('<br>')
+                : 'No project keys found';
+            $('#projectsModal').modal('show');
+        }
+
+        // Show Exceptions Modal
+        function showExceptionsModal() {
+            const exceptionsContent = document.getElementById('exceptionsContent');
+            exceptionsContent.innerHTML = exceptions.length > 0
+                ? exceptions.join('<br>')
+                : 'No exceptions found';
+            $('#exceptionsModal').modal('show');
+        }
+
+        // Show Logs Modal
+        function showLogsModal() {
+            const logsContent = document.getElementById('logsContent');
+            logsContent.innerHTML = logs.length > 0
+                ? logs.join('<br>')
+                : 'No logs found';
+            $('#logsModal').modal('show');
+        }
+
+        // Display error message
+        function displayErrorMessage(message) {
+            const errorMessageDiv = document.getElementById('errorMessage');
+            errorMessageDiv.innerText = message;
+            errorMessageDiv.style.display = 'block';
+            setTimeout(() => {
+                errorMessageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Initialize: Fetch project keys from the data.txt file on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await fetchProjects();
+        });
+    </script>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
