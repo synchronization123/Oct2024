@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JIRA Changelog Extractor</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</head>
+<body>
+
+<div class="container mt-5">
+    <h2>JIRA Changelog Extractor</h2>
+    <div class="form-group">
+        <label for="fileInput">Import .txt File:</label>
+        <input type="file" class="form-control-file" id="fileInput" accept=".txt">
+    </div>
+    <button class="btn btn-primary" id="startButton">Start</button>
+
+    <h4 class="mt-4">Output:</h4>
+    <textarea id="output" class="form-control" rows="3" readonly></textarea>
+
+    <!-- Modal for Exceptions -->
+    <div class="modal fade" id="exceptionsModal" tabindex="-1" aria-labelledby="exceptionsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exceptionsModalLabel">Exceptions</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <pre id="exceptionsOutput"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('startButton').addEventListener('click', () => {
+        const fileInput = document.getElementById('fileInput');
+        const output = document.getElementById('output');
+        const exceptionsOutput = document.getElementById('exceptionsOutput');
+
+        if (fileInput.files.length === 0) {
+            alert('Please import a file.');
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            const changelogData = e.target.result.split('\n').map(line => line.trim());
+            const projectKeys = fetchProjectKeys();
+            const outputMatches = [];
+            const exceptions = [];
+
+            changelogData.forEach((line, index) => {
+                const matches = line.match(/\b(\w+-\d+)\b/g) || [];
+                matches.forEach(match => {
+                    if (projectKeys.includes(match.split('-')[0] + '-')) {
+                        outputMatches.push(match);
+                    } else {
+                        exceptions.push(`Line ${index + 1}: ${line} (Not a valid JIRA ID)`);
+                    }
+                });
+
+                if (!matches.length && line.includes('INPR-')) {
+                    exceptions.push(`Line ${index + 1}: ${line} (No JIRA IDs found)`);
+                }
+            });
+
+            // Remove duplicates and format the output
+            output.value = [...new Set(outputMatches)].join(', ');
+
+            if (exceptions.length > 0) {
+                exceptionsOutput.innerText = exceptions.join('\n');
+                $('#exceptionsModal').modal('show');
+            }
+        };
+
+        reader.readAsText(file);
+    });
+
+    function fetchProjectKeys() {
+        // Simulating fetching project keys from projects.txt
+        return ['INPR-', 'RIM-']; // Add more keys as needed
+    }
+</script>
+
+</body>
+</html>
