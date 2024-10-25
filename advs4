@@ -1,0 +1,54 @@
+<?php
+// Enable CORS
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+
+// Set content type to plain text
+header("Content-Type: text/plain");
+
+// Set JIRA API URL and token
+$jiraApi = "https://myjira.crm.com/rest/api/projects";
+$jiraToken = "jdjjdjjdkkr";
+
+// Initialize cURL session
+$curl = curl_init();
+
+// Set cURL options
+curl_setopt_array($curl, [
+    CURLOPT_URL => $jiraApi,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer $jiraToken",
+        "Content-Type: application/json"
+    ]
+]);
+
+// Execute cURL request and capture response
+$response = curl_exec($curl);
+
+// Check for errors
+if (curl_errno($curl)) {
+    echo "Error: " . curl_error($curl);
+    curl_close($curl);
+    exit;
+}
+
+// Close cURL session
+curl_close($curl);
+
+// Decode response to process keys
+$data = json_decode($response, true);
+
+// Check if response contains project data
+if (is_array($data)) {
+    foreach ($data as $project) {
+        if (isset($project['key'])) {
+            // Print each key with a hyphen on a new line
+            echo $project['key'] . "-\n";
+        }
+    }
+} else {
+    echo "Invalid API response";
+}
+?>
