@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCI Engagements</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <style>
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .status-not-started {
+            background-color: red;
+        }
+        .status-in-progress {
+            background-color: yellow; /* Adjusted for better contrast */
+            color: black; /* Black text for better readability */
+        }
+        .status-completed {
+            background-color: green;
+        }
+        .status-default {
+            background-color: darkred;
+        }
+        .date-past {
+            color: red; /* Color for past dates */
+        }
+        .date-today {
+            color: orange; /* Color for today's date */
+        }
+        .date-default {
+            color: black; /* Default color for future dates */
+        }
+    </style>
+</head>
+<body>
+<div id="summaryCounts">
+    <h5>Assignment Counts by Lead:</h5>
+    <div id="assignmentSummary"></div>
+</div>
+
+
+    <div class="container my-5">
+        <h2>PCI Engagements</h2>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <label><strong>Select Statuses:</strong></label><br>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="notStarted" value="Not Started" checked>
+                    <label class="form-check-label" for="notStarted">Not Started</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="blocked" value="Blocked" checked>
+                    <label class="form-check-label" for="blocked">Blocked</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="cancelled" value="Cancelled">
+                    <label class="form-check-label" for="cancelled">Cancelled</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="completed" value="Completed">
+                    <label class="form-check-label" for="completed">Completed</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="inProgress" value="In Progress" checked>
+                    <label class="form-check-label" for="inProgress">In Progress</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="onHold" value="On Hold" checked>
+                    <label class="form-check-label" for="onHold">On Hold</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="waitingForResource" value="Waiting for Resource" checked>
+                    <label class="form-check-label" for="waitingForResource">Waiting for Resource</label>
+                </div>
+                <button class="btn btn-primary" id="searchButton">Search</button>
+                <span class="ml-2" id="engagementCount">Count: 0</span> <!-- Count display -->
+            </div>
+            <div>
+                <label for="usernameDropdown"><strong>Filter by Username:</strong></label>
+                <select id="usernameDropdown" class="form-control" style="display: inline-block; width: auto;">
+                    <option value="">All Users</option>
+                    <!-- Usernames will be populated here -->
+                </select>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Lead</th>
+                        <th>Tags</th>
+                        <th>Description</th> <!-- New Description column -->
+                        <th>Target Start</th> <!-- New Target Start column -->
+                        <th>Target End</th> <!-- New Target End column -->
+                        <th>Created</th> <!-- New Created column -->
+                        <th>Aging</th> <!-- New Aging column -->
+                    </tr>
+                </thead>
+                <tbody id="engagementsTable">
+                    <!-- Data from API will populate here -->
+                </tbody>
+            </table>
+        </div>
+        <nav>
+            <ul class="pagination" id="pagination">
+                <!-- Pagination buttons will be added here -->
+            </ul>
+        </nav>
+    </div>
+	
+	
+	
+	
+	
+
+
+    <script>
+        const baseURL = "https://demo.defectdojo.org/api/v2";
+        const apiKey = "548afd6fab3bea9794a41b31da0e9404f733e222";
+        const engagementURLPrefix = "https://demo.defectdojo.org/engagement/"; // Prefix for engagement link
+        const pageSize = 10;
+        let currentPage = 1;
+        let userMap = {};
+        let selectedStatuses = [];
+        let selectedUsername = ""; // Store the selected username
+        let allEngagements = []; // Store all fetched engagements
+
+        function fetchUsers() {
+            $.ajax({
+                url: `${baseURL}/users/`,
+                method: "GET",
+                headers: {
+                    "Authorization": `Token ${apiKey}`
+                },
+                success: function(data) {
+                    data.results.forEach(user => {
+                        if (user.is_active) { // Only add active users
+                            userMap[user.id] = user.username; // Map user ID to username
+                            $("#usernameDropdown").append(`<option value="${user.id}">${user.username}</option>`);
+                        }
+                    });
+                    fetchEngagements(); // Fetch engagements once users are loaded
+                },
+                error: function(error) {
+                    console.error("Error fetching users:", error);
+                }
+            });
+        }
+
+        function fetchEngagements() {
+            const url = `${baseURL}/engagements/?tags=pci`;
+            $.ajax({
+                url: url,
+                method: "GET",
+                headers: {
+                    "Authorization": `Token ${apiKey}`
+                },
+                success: function(data) {
+                    allEngagements = data.results; // Store all engagements
+                    sortEngagementsByCreatedDate(); // Sort engagements by created date
+                    filterAndDisplayEngagements(); // Filter and display based on current filters
+                },
+                error: function(error) {
+                    console.error("Error fetching data:", error);
+                }
+            });
+        }
+
+        function sortEngagementsByCreatedDate() {
+            allEngagements.sort((a, b) => new Date(b.created) - new Date(a.created)); // Sort engagements by created date (newest first)
+        }
+
+        function updateSelectedStatuses() {
+            selectedStatuses = [];
+            $("input[type=checkbox]:checked").each(function() {
+                selectedStatuses.push($(this).val());
+            });
+        }
+
+        function filterEngagements(engagements) {
+            return engagements.filter(engagement => {
+                const statusMatch = selectedStatuses.includes(engagement.status);
+                const usernameMatch = selectedUsername ? engagement.lead == selectedUsername : true; // Match username if selected
+                return statusMatch && usernameMatch;
+            });
+        }
+
+        function formatDate(date) {
+            const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
+            return new Date(date).toLocaleDateString('en-CA', options).replace(/\//g, '-'); // Format as YYYY-MM-DD
+        }
+
+        function getDateClass(date) {
+            const today = new Date();
+            const targetDate = new Date(date);
+
+            // Normalize time components to compare only the date
+            today.setHours(0, 0, 0, 0); // Set today to midnight
+            targetDate.setHours(0, 0, 0, 0); // Set target date to midnight
+
+            if (targetDate < today) {
+                return "date-past"; // Past date
+            } else if (targetDate.toDateString() === today.toDateString()) {
+                return "date-today"; // Today's date
+            }
+            return "date-default"; // Future date
+        }
+
+        function calculateAging(createdDate) {
+            const created = new Date(createdDate);
+            const today = new Date();
+            const diffTime = Math.abs(today - created);
+            return Math.floor(diffTime / (1000 * 60 * 60 * 24)); // Convert milliseconds to days
+        }
+
+        function filterAndDisplayEngagements() {
+            updateSelectedStatuses();
+            selectedUsername = $("#usernameDropdown").val(); // Get selected username
+            let filteredEngagements = filterEngagements(allEngagements);
+            updateEngagementCount(filteredEngagements.length); // Update engagement count
+            const paginatedEngagements = paginateEngagements(filteredEngagements, currentPage); // Get paginated engagements
+            populateTable(paginatedEngagements); // Populate table with filtered data
+            setupPagination(filteredEngagements.length); // Setup pagination based on filtered count
+        }
+
+        function paginateEngagements(engagements, page) {
+            const startIndex = (page - 1) * pageSize;
+            return engagements.slice(startIndex, startIndex + pageSize); // Return the slice for the current page
+        }
+
+        function populateTable(engagements) {
+            const tableBody = $("#engagementsTable");
+            tableBody.empty(); // Clear existing table rows
+
+            engagements.forEach(engagement => {
+                const engagementLink = engagementURLPrefix + engagement.id;
+                const leadUsername = userMap[engagement.lead] || "Unknown"; // Get username from userMap
+                const statusClass = getStatusClass(engagement.status); // Get status class for styling
+                const targetEndClass = getDateClass(engagement.target_end); // Determine class for target_end
+                const aging = calculateAging(engagement.created); // Calculate aging
+
+                tableBody.append(`
+                    <tr>
+                        <td><a href="${engagementLink}" target="_blank">${engagement.id}</a></td>
+                        <td>${engagement.name}</td>
+                        <td class="status-badge ${statusClass}">${engagement.status}</td>
+                        <td>${leadUsername}</td>
+                        <td>${engagement.tags.join(", ")}</td>
+                        <td>${engagement.description}</td>
+                        <td>${formatDate(engagement.target_start)}</td>
+                        <td class="${targetEndClass}">${formatDate(engagement.target_end)}</td>
+                        <td>${formatDate(engagement.created)}</td>
+                        <td>${aging}</td> <!-- Display Aging -->
+                    </tr>
+                `);
+            });
+        }
+
+        function getStatusClass(status) {
+            switch (status) {
+                case "Not Started":
+                    return "status-not-started";
+                case "In Progress":
+                    return "status-in-progress";
+                case "Completed":
+                    return "status-completed";
+                default:
+                    return "status-default";
+            }
+        }
+
+        function setupPagination(totalCount) {
+            const pagination = $("#pagination");
+            pagination.empty();
+            const pageCount = Math.ceil(totalCount / pageSize);
+            for (let i = 1; i <= pageCount; i++) {
+                pagination.append(`
+                    <li class="page-item ${i === currentPage ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                    </li>
+                `);
+            }
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            filterAndDisplayEngagements(); // Refresh the displayed engagements for the new page
+        }
+
+        function updateEngagementCount(count) {
+            $("#engagementCount").text(`Count: ${count}`); // Update the count display
+        }
+
+        $(document).ready(function() {
+            fetchUsers(); // Start fetching users on page load
+            $("#usernameDropdown").change(filterAndDisplayEngagements); // Re-filter on username change
+            $("input[type=checkbox]").change(filterAndDisplayEngagements); // Re-filter on status change
+        });
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+    </script>
+</body>
+</html>
