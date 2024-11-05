@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SonarQube Issues Data Table</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center">SonarQube Project Issues</h2>
+        <!-- Project Name Filter Dropdown -->
+        <div class="mb-3">
+            <label for="projectFilter" class="form-label">Filter by Project Name:</label>
+            <select id="projectFilter" class="form-select">
+                <option value="">All Projects</option>
+                <!-- Options will be dynamically populated -->
+            </select>
+        </div>
+        <!-- DataTable -->
+        <table id="issuesTable" class="table table-striped table-bordered">
+            <thead>
+                <tr id="tableHeaderRow">
+                    <!-- Headers will be populated dynamically -->
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Data will be inserted dynamically -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Bootstrap & DataTables JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // List of project URLs with project names for filtering
+            const projects = [
+                { name: "Flex", url: 'https://next.sonarqube.com/sonarqube/api/issues/list?project=org.sonarsource.flex%3Aflex' },
+                { name: "helm-chart-sonarqube", url: 'https://next.sonarqube.com/sonarqube/api/issues/list?project=sonarsource-cfamily-examples_linux-autotools-azure-sq_AYAYsLkPMi_-8diYBjGA' }
+                // Add more project objects as needed
+            ];
+
+            // Columns to display in the table
+            const columnsToShow = ['projectName', 'key', 'rule', 'severity', 'component', 'line', 'message', 'type'];
+
+            // Function to fetch data from a given URL
+            async function fetchData(url) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`Error fetching data from ${url}`);
+                    const data = await response.json();
+                    return data.issues || [];
+                } catch (error) {
+                    console.error(error);
+                    return [];
+                }
+            }
+
+            // Function to fetch data from all project URLs
+            async function fetchAllData() {
+                const allData = [];
+                for (const project of projects) {
+                    const projectData = await fetchData(project.url);
+                    // Add project name to each issue
+                    projectData.forEach(issue => issue.projectName = project.name);
+                    allData.push(...projectData);
+                }
+                return allData;
+            }
+
+            // Function to dynamically create table headers based on specified columns
+            function createHeaders() {
+                const headerRow = document.getElementById('tableHeaderRow');
+                columnsToShow.forEach(column => {
+                    const th = document.createElement('th');
+                    th.textContent = column === 'projectName' ? 'Project Name' : column.toUpperCase();
+                    headerRow.appendChild(th);
+                });
+            }
+
+            // Function to populate table body with fetched data
+            function populateTable(data) {
+                const tableBody = document.getElementById('tableBody');
+                tableBody.innerHTML = ''; // Clear previous data
+                data.forEach(rowData => {
+                    const row = document.createElement('tr');
+                    columnsToShow.forEach(column => {
+                        const cell = document.createElement('td');
+                        cell.textContent = rowData[column] !== undefined ? rowData[column] : ''; // Handle missing fields
+                        row.appendChild(cell);
+                    });
+                    tableBody.appendChild(row);
+                });
+                $('#issuesTable').DataTable(); // Initialize DataTables after data is populated
+            }
+
+            // Function to populate project name filter dropdown
+            function populateProjectFilter() {
+                const projectFilter = document.getElementById('projectFilter');
+                projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.name;
+                    option.textContent = project.name;
+                    projectFilter.appendChild(option);
+                });
+            }
+
+            // Main function to initialize the table
+            async function initializeTable() {
+                createHeaders(); // Create table headers
+                populateProjectFilter(); // Populate project name filter dropdown
+                const data = await fetchAllData();
+                populateTable(data); // Populate table with data
+
+                // Handle project filter change
+                $('#projectFilter').on('change', function () {
+                    const selectedProject = this.value;
+                    const filteredData = selectedProject
+                        ? data.filter(item => item.projectName === selectedProject)
+                        : data; // Show all if no filter selected
+                    $('#issuesTable').DataTable().destroy(); // Destroy existing table for reinitialization
+                    populateTable(filteredData); // Repopulate table with filtered data
+                });
+            }
+
+            // Initialize the table on page load
+            initializeTable();
+        });
+    </script>
+</body>
+</html>
