@@ -1,0 +1,79 @@
+import os
+import re
+import openpyxl
+
+def extract_sql_queries(file_path):
+    """
+    Extract SQL queries from a JSP file.
+    Returns a list of dictionaries containing file name, path, line number, and SQL query.
+    """
+    results = []
+    query_pattern = re.compile(
+        r"(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE TABLE|ALTER TABLE|DROP TABLE|MERGE INTO)\s+.*?;",
+        re.DOTALL | re.IGNORECASE
+    )
+    
+    with open(file_path, 'r', encoding='utf-8') as file:
+        content = file.read()
+        
+        matches = query_pattern.finditer(content)
+        for match in matches:
+            # Capture the start and end line number of the SQL query
+            start_line = content.count('\n', 0, match.start()) + 1
+            query_text = match.group().strip()
+            results.append({
+                'filename': os.path.basename(file_path),
+                'path': file_path,
+                'line_number': start_line,
+                'query': query_text
+            })
+    
+    if not results:
+        # If no SQL queries found, add a message to the results
+        results.append({
+            'filename': os.path.basename(file_path),
+            'path': file_path,
+            'line_number': "N/A",
+            'query': "No SQL queries found"
+        })
+    
+    return results
+
+def export_to_excel(data, output_path):
+    """
+    Export the extracted SQL query data to an Excel file.
+    """
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "SQL Queries"
+
+    # Set headers
+    headers = ['Filename', 'Path', 'Line Number', 'SQL Query']
+    sheet.append(headers)
+
+    # Write data to sheet
+    for entry in data:
+        sheet.append([entry['filename'], entry['path'], entry['line_number'], entry['query']])
+
+    # Save workbook
+    workbook.save(output_path)
+    print(f"Data exported to {output_path}")
+
+def process_directory(directory_path=os.getcwd()):
+    """
+    Process all .jsp files in the given directory and all subdirectories,
+    extract SQL queries, and export them to Excel.
+    """
+    all_data = []
+    for root, dirs, files in os.walk(directory_path):
+        for file in files:
+            if file.endswith('.jsp'):
+                file_path = os.path.join(root, file)
+                data = extract_sql_queries(file_path)
+                all_data.extend(data)
+
+    # Export to Excel
+    export_to_excel(all_data, 'sql_queries_output.xlsx')
+
+# Usage
+process_directory()  # By default, it will use the current directory
