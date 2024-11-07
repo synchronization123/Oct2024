@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic API Data Table</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    .table-container {
+      margin-top: 20px;
+    }
+    .pagination {
+      margin: 20px 0;
+    }
+    .search-container, .column-selection {
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body class="container">
+
+<h2 class="my-4">Dynamic API Data Table</h2>
+
+<div class="search-container">
+  <input type="text" id="searchBox" class="form-control" placeholder="Search...">
+</div>
+
+<div class="column-selection">
+  <label>Select columns to display:</label>
+  <div id="columnCheckboxes" class="form-check-inline">
+    <!-- Checkboxes will be dynamically generated here -->
+  </div>
+</div>
+
+<div class="table-container">
+  <table id="dataTable" class="table table-bordered table-striped">
+    <thead>
+      <tr id="tableHeaders"></tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<div class="pagination">
+  <button id="prevPage" class="btn btn-primary">Previous</button>
+  <span id="pageIndicator">Page 1</span>
+  <button id="nextPage" class="btn btn-primary">Next</button>
+</div>
+
+<script>
+  const apiUrl = "https://jsonplaceholder.typicode.com/users";  // Replace with your API endpoint
+  let data = [];
+  let currentPage = 1;
+  const rowsPerPage = 5;
+
+  async function fetchData(apiUrl) {
+    try {
+      const response = await fetch(apiUrl);
+      data = await response.json();
+      renderTable();
+      renderColumnCheckboxes();
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+  }
+
+  function renderColumnCheckboxes() {
+    const columnCheckboxes = document.getElementById("columnCheckboxes");
+    columnCheckboxes.innerHTML = '';
+
+    if (data.length === 0) return;
+
+    const headers = Object.keys(data[0]);
+    headers.forEach(header => {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "form-check-input";
+      checkbox.checked = true;
+      checkbox.value = header;
+      checkbox.addEventListener("change", renderTable);
+      
+      const label = document.createElement("label");
+      label.className = "form-check-label mr-3";
+      label.textContent = header.replace(/_/g, ' ');
+
+      columnCheckboxes.appendChild(checkbox);
+      columnCheckboxes.appendChild(label);
+    });
+  }
+
+  function renderTable() {
+    const tableHeaders = document.getElementById("tableHeaders");
+    const tableBody = document.getElementById("tableBody");
+    tableHeaders.innerHTML = '';
+    tableBody.innerHTML = '';
+
+    if (data.length === 0) return;
+
+    const headers = Object.keys(data[0]);
+    const visibleColumns = Array.from(document.querySelectorAll("#columnCheckboxes input:checked"))
+      .map(input => input.value);
+
+    // Render table headers
+    visibleColumns.forEach(header => {
+      const th = document.createElement("th");
+      th.textContent = header.replace(/_/g, ' ');
+      tableHeaders.appendChild(th);
+    });
+
+    // Render table rows with search and pagination
+    const filteredData = data.filter(item => 
+      Object.values(item).some(value => 
+        value.toString().toLowerCase().includes(document.getElementById("searchBox").value.toLowerCase())
+      )
+    );
+    
+    const start = (currentPage - 1) * rowsPerPage;
+    const paginatedData = filteredData.slice(start, start + rowsPerPage);
+
+    paginatedData.forEach(item => {
+      const tr = document.createElement("tr");
+      visibleColumns.forEach(header => {
+        const td = document.createElement("td");
+        td.textContent = item[header] ?? 'N/A';
+        tr.appendChild(td);
+      });
+      tableBody.appendChild(tr);
+    });
+
+    document.getElementById("pageIndicator").textContent = `Page ${currentPage}`;
+  }
+
+  document.getElementById("searchBox").addEventListener("input", () => {
+    currentPage = 1;
+    renderTable();
+  });
+
+  document.getElementById("prevPage").addEventListener("click", () => {
+    if (currentPage > 1) {
+      currentPage--;
+      renderTable();
+    }
+  });
+
+  document.getElementById("nextPage").addEventListener("click", () => {
+    const totalPages = Math.ceil(data.length / rowsPerPage);
+    if (currentPage < totalPages) {
+      currentPage++;
+      renderTable();
+    }
+  });
+
+  fetchData(apiUrl);
+</script>
+
+</body>
+</html>
