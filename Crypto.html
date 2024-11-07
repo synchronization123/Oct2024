@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cryptographic Algorithm Finder</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<div class="container mt-5">
+    <h2 class="text-center mb-4">Cryptographic Algorithm Finder</h2>
+    
+    <!-- File Upload Section -->
+    <div class="mb-3">
+        <label for="fileInput" class="form-label">Select Files or Folders:</label>
+        <input type="file" id="fileInput" multiple webkitdirectory class="form-control" />
+    </div>
+    
+    <!-- Scan and Export Buttons -->
+    <div class="mb-3">
+        <button class="btn btn-primary me-2" onclick="scanFiles()">Scan for Algorithms</button>
+        <button class="btn btn-success" onclick="exportToExcel()">Export to Excel</button>
+    </div>
+    
+    <!-- Results Table -->
+    <div class="mt-4">
+        <h4>Results:</h4>
+        
+        <!-- Pagination and Rows per Page Selector -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <label for="rowsPerPage" class="form-label">Rows per page:</label>
+                <select id="rowsPerPage" class="form-select" style="width: auto;" onchange="updatePagination()">
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div id="paginationControls" class="pagination"></div>
+        </div>
+
+        <!-- Table with Filter Dropdowns in Headers -->
+        <table class="table table-bordered table-striped" id="resultsTable">
+            <thead class="table-dark">
+                <tr>
+                    <th>Algorithm Name 
+                        <select class="form-select form-select-sm" id="algorithmFilter" onchange="applyFilters()">
+                            <option value="">All</option>
+                        </select>
+                    </th>
+                    <th>File Name
+                        <select class="form-select form-select-sm" id="fileFilter" onchange="applyFilters()">
+                            <option value="">All</option>
+                        </select>
+                    </th>
+                    <th>Line Number
+                        <select class="form-select form-select-sm" id="lineFilter" onchange="applyFilters()">
+                            <option value="">All</option>
+                        </select>
+                    </th>
+                    <th>Path
+                        <select class="form-select form-select-sm" id="pathFilter" onchange="applyFilters()">
+                            <option value="">All</option>
+                        </select>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="resultsBody">
+                <!-- Results will be inserted here dynamically -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const CRYPTO_ALGORITHMS = [
+        'AES', 'DES', '3DES', 'RSA', 'Blowfish', 'Twofish', 'RC4', 'RC5', 'MD5', 'SHA-1', 'SHA-256', 'SHA-512',
+        'HMAC', 'PBKDF2', 'bcrypt', 'scrypt', 'ECDSA', 'DSA'
+    ];
+    const cryptoPattern = new RegExp(`\\b(${CRYPTO_ALGORITHMS.join('|')})\\b`, 'i');
+
+    let results = [];
+    let currentPage = 1;
+    let rowsPerPage = 10;
+    let filteredResults = [];
+
+    async function scanFiles() {
+        const fileInput = document.getElementById('fileInput');
+        results = [];
+
+        if (!fileInput.files.length) {
+            alert('Please select files or a folder to scan.');
+            return;
+        }
+
+        const readFileChunk = async (file) => {
+            const CHUNK_SIZE = 1024 * 1024;  // 1MB
+            let offset = 0;
+            let fileReader = new FileReader();
+            let fileContent = '';
+            
+            return new Promise((resolve, reject) => {
+                const readNextChunk = () => {
+                    const slice = file.slice(offset, offset + CHUNK_SIZE);
+                    fileReader.readAsText(slice);
+                    fileReader.onload = function (event) {
+                        if (event.target.result) {
+                            fileContent += event.target.result;
+                        }
+                        offset += CHUNK_SIZE;
+                        if (offset < file.size) {
+                            readNextChunk();
+                        } else {
+                            resolve(fileContent);
+                        }
+                    };
+                    fileReader.onerror = reject;
+                };
+
+                readNextChunk();
+            });
+        };
+
+        for (const file of fileInput.files) {
+            try {
+                let fileContent = await readFileChunk(file);
+                processFileContent(file, fileContent);
+            } catch (error) {
+                console.error('Error reading file:', file.name, error);
+            }
+        }
+
+        // After scanning, populate filters and display results
+        currentPage = 1;
+        filteredResults = [...results];
+        populateFilters();
+        displayResults();
+    }
+
+    function processFileContent(file, content) {
+        const lines = content.split('\n');
+        const uniqueEntries = new Set();
+
+        lines.forEach((line, index) => {
+            const matches = line.match(cryptoPattern);
+            if (matches && !uniqueEntries.has(index)) {
+                uniqueEntries.add(index);
+                results.push({ algorithm: matches[0], fileName: file.name, lineNumber: index + 1, path: file.webkitRelativePath || file.name });
+            }
+        });
+
+        if (uniqueEntries.size === 0) {
+            results.push({ algorithm: 'NA', fileName: file.name, lineNumber: 'NA', path: file.webkitRelativePath || file.name });
+        }
+    }
+
+    function populateFilters() {
+        const algorithmSet = new Set(results.map(result => result.algorithm.toLowerCase()));
+        const fileSet = new Set(results.map(result => result.fileName));
+        const lineSet = new Set(results.map(result => result.lineNumber));
+        const pathSet = new Set(results.map(result => result.path));
+
+        populateFilterDropdown("algorithmFilter", algorithmSet, true);
+        populateFilterDropdown("fileFilter", fileSet);
+        populateFilterDropdown("lineFilter", lineSet);
+        populateFilterDropdown("pathFilter", pathSet);
+    }
+
+    function populateFilterDropdown(elementId, uniqueItems, isAlgorithm = false) {
+        const filterDropdown = document.getElementById(elementId);
+        filterDropdown.innerHTML = '<option value="">All</option>';
+        
+        uniqueItems.forEach(item => {
+            const option = document.createElement('option');
+            option.value = isAlgorithm ? item.toLowerCase() : item;
+            option.text = item.charAt(0).toUpperCase() + item.slice(1);
+            filterDropdown.appendChild(option);
+        });
+    }
+
+    function applyFilters() {
+        const algorithmFilter = document.getElementById('algorithmFilter').value.toLowerCase();
+        const fileFilter = document.getElementById('fileFilter').value;
+        const lineFilter = document.getElementById('lineFilter').value;
+        const pathFilter = document.getElementById('pathFilter').value;
+
+        filteredResults = results.filter(result => {
+            return (algorithmFilter === "" || result.algorithm.toLowerCase() === algorithmFilter) &&
+                   (fileFilter === "" || result.fileName === fileFilter) &&
+                   (lineFilter === "" || result.lineNumber.toString() === lineFilter) &&
+                   (pathFilter === "" || result.path === pathFilter);
+        });
+
+        currentPage = 1;
+        displayResults();
+    }
+
+    function displayResults() {
+        const resultsBody = document.getElementById('resultsBody');
+        resultsBody.innerHTML = '';
+
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const paginatedResults = filteredResults.slice(start, end);
+
+        paginatedResults.forEach(result => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${result.algorithm}</td>
+                <td>${result.fileName}</td>
+                <td>${result.lineNumber}</td>
+                <td>${result.path}</td>
+            `;
+            resultsBody.appendChild(row);
+        });
+
+        setupPagination();
+    }
+
+    function setupPagination() {
+        const paginationControls = document.getElementById('paginationControls');
+        paginationControls.innerHTML = '';
+
+        const totalPages = Math.ceil(filteredResults.length / rowsPerPage);
+        for (let i = 1; i <= totalPages; i++) {
+            const pageButton = document.createElement('button');
+            pageButton.className = 'btn btn-link';
+            pageButton.textContent = i;
+            pageButton.onclick = () => {
+                currentPage = i;
+                displayResults();
+            };
+            paginationControls.appendChild(pageButton);
+        }
+    }
+
+    function updatePagination() {
+        rowsPerPage = parseInt(document.getElementById('rowsPerPage').value);
+        currentPage = 1;
+        displayResults();
+    }
+
+    function exportToExcel() {
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(filteredResults);
+        XLSX.utils.book_append_sheet(wb, ws, "Results");
+
+        XLSX.writeFile(wb, "crypto_scan_results.xlsx");
+    }
+</script>
+
+</body>
+</html>
