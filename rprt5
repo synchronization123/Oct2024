@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DefectDojo Test Findings Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @media print {
+            #inputSection, #printButton {
+                display: none;
+            }
+            .page-footer {
+                position: fixed;
+                bottom: 0;
+                text-align: center;
+                width: 100%;
+            }
+            .page-footer:after {
+                content: counter(page);
+                counter-increment: page;
+            }
+            .container {
+                width: 80%; /* Set width to 80% for printing */
+                padding: 10mm; /* Adjust padding if needed */
+                border: 1px solid #dee2e6;
+                margin: auto;
+            }
+        }
+        body {
+            background-color: #f8f9fa;
+            font-size: 12pt;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            width: 80%;  /* Set to 80% for regular view */
+            margin: auto;
+            padding: 20mm;
+        }
+        .section-title {
+            font-size: 1.5em;
+            color: #343a40;
+            margin-bottom: 10px;
+        }
+        .finding-detail {
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .proof-image {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 10px auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+        #summaryChart {
+            max-width: 400px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Report Info Section -->
+    <div id="reportInfo">
+        <h2 class="text-center mb-4">DefectDojo Test Findings Report</h2>
+        <div class="row">
+            <div class="col-md-6">
+                <label for="reportTitle" class="form-label">Report Title</label>
+                <input type="text" class="form-control" id="reportTitle" placeholder="Enter report title">
+            </div>
+            <div class="col-md-3">
+                <label for="startDate" class="form-label">Start Date</label>
+                <input type="date" class="form-control" id="startDate">
+            </div>
+            <div class="col-md-3">
+                <label for="endDate" class="form-label">End Date</label>
+                <input type="date" class="form-control" id="endDate">
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <label for="preparedBy" class="form-label">Report Prepared By</label>
+                <input type="text" class="form-control" id="preparedBy" placeholder="Prepared by">
+            </div>
+            <div class="col-md-6">
+                <label for="reviewedBy" class="form-label">Reviewed By</label>
+                <input type="text" class="form-control" id="reviewedBy" placeholder="Reviewed by">
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Section -->
+    <div id="inputSection" class="mt-4">
+        <label for="testIds" class="form-label">Enter Test IDs (comma-separated for multiple)</label>
+        <input type="text" class="form-control" id="testIds" placeholder="Enter test IDs">
+        <button class="btn btn-primary mt-3" onclick="fetchFindings()">Fetch Findings</button>
+    </div>
+
+    <!-- Findings Summary & Pie Chart -->
+    <div id="reportHeader" class="d-none mt-4">
+        <h3 class="section-title">Findings Summary</h3>
+        <div id="summaryChart">
+            <canvas id="severityChart"></canvas>
+        </div>
+        <p>Total Findings: <span id="totalFindings"></span></p>
+        <p>Critical: <span id="criticalCount"></span></p>
+        <p>High: <span id="highCount"></span></p>
+        <p>Medium: <span id="mediumCount"></span></p>
+        <p>Low: <span id="lowCount"></span></p>
+        <p>Informational: <span id="informationalCount"></span></p>
+    </div>
+
+    <!-- Findings Index -->
+    <div id="findingsIndex" class="d-none mt-4">
+        <h3 class="section-title">Findings Index</h3>
+        <ul id="indexList" class="list-unstyled"></ul>
+    </div>
+
+    <!-- Findings Display Area -->
+    <div id="findingsDisplay" class="d-none">
+        <h3 class="section-title">Detailed Findings</h3>
+        <div id="findingsContent"></div>
+    </div>
+
+    <!-- Print Button -->
+    <button id="printButton" class="btn btn-secondary mt-4" onclick="window.print()">Print Report</button>
+
+    <!-- Footer with Page Number -->
+    <div class="page-footer">
+        Page <span class="page-number"></span>
+    </div>
+</div>
+
+<script>
+// Update the script to handle multiple test IDs and error handling...
+// Add index generation and linking logic for findings.
+
+function fetchFindings() {
+    // Clear previous content
+    document.getElementById('indexList').innerHTML = '';
+    document.getElementById('findingsContent').innerHTML = '';
+
+    const testIds = document.getElementById('testIds').value.split(',').map(id => id.trim());
+    const findings = []; // Collect all findings from multiple test IDs
+
+    let promises = testIds.map(testId => 
+        fetch(`/api/v2/findings/?test=${testId}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to fetch');
+                return response.json();
+            })
+            .then(data => findings.push(...data.results))
+            .catch(error => console.error(`Error fetching findings for test ${testId}`, error))
+    );
+
+    Promise.all(promises).then(() => {
+        displayFindings(findings);
+    }).catch(() => {
+        alert("An error occurred while fetching findings.");
+    });
+}
+
+function displayFindings(findings) {
+    const indexList = document.getElementById('indexList');
+    const findingsContent = document.getElementById('findingsContent');
+    findingsContent.innerHTML = '';  // Clear previous findings
+
+    findings.forEach((finding, index) => {
+        const indexLink = document.createElement('li');
+        indexLink.innerHTML = `<a href="#finding${index}">${finding.title}</a>`;
+        indexList.appendChild(indexLink);
+
+        const findingElement = document.createElement('div');
+        findingElement.id = `finding${index}`;
+        findingElement.classList.add('finding-detail');
+        findingElement.innerHTML = `
+            <h4>${finding.title}</h4>
+            <table class="table table-bordered">
+                <tr><th>Severity</th><td>${finding.severity}</td></tr>
+                <tr><th>CVSSv3 Score</th><td>${finding.cvssv3_score}</td></tr>
+                <tr><th>CVSSv3</th><td>${finding.cvssv3}</td></tr>
+                <tr><th>Reporter</th><td>${finding.reporter}</td></tr>
+                <tr><th>Vulnerability IDs</th><td>${finding.vulnerability_ids}</td></tr>
+            </table>
+            <p><strong>Description:</strong> ${finding.description}</p>
+            <p><strong>Mitigation:</strong> ${finding.mitigation}</p>
+            <p><strong>Impact:</strong> ${finding.impact}</p>
+            <p><strong>Steps to Reproduce:</strong> ${finding.steps_to_reproduce}</p>
+            ${getImageHtml(finding.steps_to_reproduce)}
+        `;
+        findingsContent.appendChild(findingElement);
+    });
+
+    document.getElementById('reportHeader').classList.remove('d-none');
+    document.getElementById('findingsIndex').classList.remove('d-none');
+    document.getElementById('findingsDisplay').classList.remove('d-none');
+}
+
+// Function to extract image URL and format properly
+function getImageHtml(text) {
+    const urlPattern = /(https?:\/\/(?:[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=]+\/[a-zA-Z0-9\-_]+\/Finding)\b/gi;
+    const urls = text.match(urlPattern) || [];
+    return urls.map(url => `
+        <img src="${url}" alt="Proof of Concept" class="proof-image">
+    `).join('');
+}
+
+// Function to generate summary chart
+function generateSummaryChart(counts) {
+    const ctx = document.getElementById('severityChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Critical', 'High', 'Medium', 'Low', 'Informational'],
+            datasets: [{
+                data: [counts.critical, counts.high, counts.medium, counts.low, counts.informational],
+                backgroundColor: ['#d9534f', '#f0ad4e', '#5bc0de', '#5cb85c', '#c0c0c0']
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: { callbacks: { label: context => `${context.label}: ${context.raw}` } }
+            }
+        }
+    });
+}
+
+// Error handling on input change
+document.getElementById('testIds').addEventListener('input', () => {
+    document.getElementById('findingsContent').innerHTML = '';
+    document.getElementById('indexList').innerHTML = '';
+});
+
+function countSeverities(findings) {
+    const counts = { critical: 0, high: 0, medium: 0, low: 0, informational: 0 };
+    findings.forEach(finding => {
+        switch (finding.severity.toLowerCase()) {
+            case 'critical': counts.critical++; break;
+            case 'high': counts.high++; break;
+            case 'medium': counts.medium++; break;
+            case 'low': counts.low++; break;
+            case 'informational': counts.informational++; break;
+        }
+    });
+    document.getElementById('totalFindings').textContent = findings.length;
+    document.getElementById('criticalCount').textContent = counts.critical;
+    document.getElementById('highCount').textContent = counts.high;
+    document.getElementById('mediumCount').textContent = counts.medium;
+    document.getElementById('lowCount').textContent = counts.low;
+    document.getElementById('informationalCount').textContent = counts.informational;
+
+    generateSummaryChart(counts);
+}
+</script>
+
+</body>
+</html>
