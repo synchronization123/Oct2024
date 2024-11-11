@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DefectDojo Test Findings Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            margin-top: 30px;
+        }
+        .section-title {
+            font-size: 1.5em;
+            color: #343a40;
+            margin-bottom: 15px;
+        }
+        .finding-table th, .finding-table td {
+            vertical-align: top;
+            border-top: none;
+        }
+        .finding-detail {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            background-color: #ffffff;
+        }
+        .proof-image {
+            max-width: 100%;
+            height: auto;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 class="text-center mb-4">DefectDojo Test Findings Report</h2>
+    
+    <!-- Test ID Input -->
+    <div class="mb-4">
+        <label for="testId" class="form-label">Enter Test ID</label>
+        <input type="text" class="form-control" id="testId" placeholder="Enter test ID">
+        <button class="btn btn-primary mt-3" onclick="fetchFindings()">Fetch Findings</button>
+    </div>
+
+    <!-- Findings Data Table -->
+    <div id="findingData" class="d-none">
+        <h3 class="section-title">Findings Report</h3>
+        <table class="table table-bordered finding-table">
+            <thead class="table-light">
+                <tr>
+                    <th>Severity</th>
+                    <th>CVSSv3 Score</th>
+                    <th>CVSSv3</th>
+                    <th>Reporter</th>
+                    <th>Vulnerability IDs</th>
+                </tr>
+            </thead>
+            <tbody id="findingTableBody"></tbody>
+        </table>
+        
+        <!-- Detailed Sections for Each Finding -->
+        <div id="findingDetails"></div>
+    </div>
+</div>
+
+<script>
+// API Base URL and token (update with actual token and URL)
+const API_BASE_URL = "https://demo.defectdojo.org/api/v2";  // Replace with your actual base URL
+const API_TOKEN = "YOUR_API_TOKEN";  // Replace with your actual API token
+
+// Fetch findings associated with a specific Test ID
+async function fetchFindings() {
+    const testId = document.getElementById("testId").value;
+    if (!testId) {
+        alert("Please enter a Test ID");
+        return;
+    }
+
+    try {
+        // Fetch findings associated with the test, ordered by severity
+        const findingsResponse = await fetch(`${API_BASE_URL}/findings/?test=${testId}`, {
+            headers: {
+                "Authorization": `Token ${API_TOKEN}`
+            }
+        });
+        const findingData = await findingsResponse.json();
+        
+        // Sort findings by severity from Critical to Informational
+        const severityOrder = ["Critical", "High", "Medium", "Low", "Informational"];
+        findingData.results.sort((a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity));
+
+        // Display the findings in table format and detailed sections below
+        displayFindingData(findingData.results);
+    } catch (error) {
+        console.error("Error fetching findings:", error);
+        alert("An error occurred while fetching findings.");
+    }
+}
+
+// Display Finding Data in Table and Detail Sections
+function displayFindingData(data) {
+    const findingTableBody = document.getElementById("findingTableBody");
+    const findingDetails = document.getElementById("findingDetails");
+    findingTableBody.innerHTML = ""; // Clear previous table results
+    findingDetails.innerHTML = ""; // Clear previous detailed sections
+
+    data.forEach(finding => {
+        // Add table row for summary data
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${finding.severity || "N/A"}</td>
+            <td>${finding.cvssv3_score || "N/A"}</td>
+            <td>${finding.cvssv3 || "N/A"}</td>
+            <td>${finding.reporter || "N/A"}</td>
+            <td>${finding.vulnerability_ids || "N/A"}</td>
+        `;
+        findingTableBody.appendChild(row);
+
+        // Add detailed section for description, mitigation, impact, and steps to reproduce
+        const detailDiv = document.createElement("div");
+        detailDiv.className = "finding-detail";
+        detailDiv.innerHTML = `
+            <h5 class="text-dark">${finding.title || "Finding"}</h5>
+            <p><strong>Description:</strong> ${finding.description || "N/A"}</p>
+            <p><strong>Mitigation:</strong> ${finding.mitigation || "N/A"}</p>
+            <p><strong>Impact:</strong> ${finding.impact || "N/A"}</p>
+            <p><strong>Steps to Reproduce:</strong> ${finding.steps_to_reproduce || "N/A"}</p>
+            ${getProofOfConceptImage(finding.steps_to_reproduce)}
+        `;
+        findingDetails.appendChild(detailDiv);
+    });
+    document.getElementById("findingData").classList.remove("d-none");
+}
+
+// Extract and display proof of concept image if link is available
+function getProofOfConceptImage(steps) {
+    const proofLinkPattern = /(https?:\/\/[^\s]+)/g;
+    const proofLinks = steps.match(proofLinkPattern);
+    if (proofLinks) {
+        return proofLinks.map(link => `
+            <a href="${link}" target="_blank"><img src="${link}" alt="Proof of Concept" class="proof-image"></a>
+        `).join("");
+    }
+    return "";
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js"></script>
+</body>
+</html>
