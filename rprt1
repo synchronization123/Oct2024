@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DefectDojo Test Findings Viewer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin-top: 30px;
+        }
+        .section-title {
+            margin-top: 20px;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 class="text-center mb-4">DefectDojo Test Findings Viewer</h2>
+    
+    <!-- Test ID Input -->
+    <div class="mb-4">
+        <label for="testId" class="form-label">Enter Test ID</label>
+        <input type="text" class="form-control" id="testId" placeholder="Enter test ID">
+        <button class="btn btn-primary mt-3" onclick="fetchFindings()">Fetch Findings</button>
+    </div>
+
+    <!-- Display Findings Data -->
+    <div id="findingData" class="card mb-4 d-none">
+        <div class="card-header">
+            <h5 class="section-title">Findings</h5>
+        </div>
+        <div class="card-body">
+            <ul id="findingList" class="list-group"></ul>
+        </div>
+    </div>
+</div>
+
+<script>
+// API Base URL and token (update with actual token and URL)
+const API_BASE_URL = "https://demo.defectdojo.org/api/v2";  // Replace with your actual base URL
+const API_TOKEN = "YOUR_API_TOKEN";  // Replace with your actual API token
+
+// Fetch findings associated with a specific Test ID
+async function fetchFindings() {
+    const testId = document.getElementById("testId").value;
+    if (!testId) {
+        alert("Please enter a Test ID");
+        return;
+    }
+
+    try {
+        // Fetch findings associated with the test, ordered by severity
+        const findingsResponse = await fetch(`${API_BASE_URL}/findings/?test=${testId}`, {
+            headers: {
+                "Authorization": `Token ${API_TOKEN}`
+            }
+        });
+        const findingData = await findingsResponse.json();
+        
+        // Sort findings by severity from Critical to Informational
+        const severityOrder = ["Critical", "High", "Medium", "Low", "Informational"];
+        findingData.results.sort((a, b) => severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity));
+
+        // Display the findings
+        displayFindingData(findingData.results);
+    } catch (error) {
+        console.error("Error fetching findings:", error);
+        alert("An error occurred while fetching findings.");
+    }
+}
+
+// Display Finding Data
+function displayFindingData(data) {
+    const findingList = document.getElementById("findingList");
+    findingList.innerHTML = ""; // Clear previous results
+    data.forEach(finding => {
+        const listItem = document.createElement("li");
+        listItem.className = "list-group-item";
+        listItem.innerHTML = `
+            <strong>Severity:</strong> ${finding.severity || "N/A"}<br>
+            <strong>CVSSv3 Score:</strong> ${finding.cvssv3_score || "N/A"}<br>
+            <strong>CVSSv3:</strong> ${finding.cvssv3 || "N/A"}<br>
+            <strong>Reporter:</strong> ${finding.reporter || "N/A"}<br>
+            <strong>Vulnerability IDs:</strong> ${finding.vulnerability_ids || "N/A"}<br>
+            <strong>Active:</strong> ${finding.active ? "Yes" : "No"}<br>
+            <strong>Verified:</strong> ${finding.verified ? "Yes" : "No"}<br>
+            <strong>Description:</strong> ${finding.description || "N/A"}<br>
+            <strong>Mitigation:</strong> ${finding.mitigation || "N/A"}<br>
+            <strong>Impact:</strong> ${finding.impact || "N/A"}<br>
+            <strong>Steps to Reproduce:</strong> ${finding.steps_to_reproduce || "N/A"}
+        `;
+        findingList.appendChild(listItem);
+    });
+    document.getElementById("findingData").classList.remove("d-none");
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js"></script>
+</body>
+</html>
