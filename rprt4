@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DefectDojo Test Findings Report</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @media print {
+            #inputSection, #printButton {
+                display: none;
+            }
+            .page-footer {
+                position: fixed;
+                bottom: 0;
+                text-align: center;
+                width: 100%;
+            }
+            .page-footer:after {
+                content: counter(page);
+                counter-increment: page;
+            }
+        }
+        body {
+            background-color: #f8f9fa;
+            font-size: 12pt;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            width: 210mm;
+            margin: auto;
+            padding: 20mm;
+        }
+        .section-title {
+            font-size: 1.5em;
+            color: #343a40;
+            margin-bottom: 10px;
+        }
+        .finding-detail {
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .proof-image {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 10px auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+        #summaryChart {
+            max-width: 400px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="inputSection">
+        <h2 class="text-center mb-4">DefectDojo Test Findings Report</h2>
+        <label for="testId" class="form-label">Enter Test ID</label>
+        <input type="text" class="form-control" id="testId" placeholder="Enter test ID">
+        <button class="btn btn-primary mt-3" onclick="fetchFindings()">Fetch Findings</button>
+    </div>
+
+    <!-- Findings Summary & Pie Chart -->
+    <div id="reportHeader" class="d-none">
+        <h3 class="section-title">Findings Summary</h3>
+        <div id="summaryChart">
+            <canvas id="severityChart"></canvas>
+        </div>
+        <p>Total Findings: <span id="totalFindings"></span></p>
+        <p>Critical: <span id="criticalCount"></span></p>
+        <p>High: <span id="highCount"></span></p>
+        <p>Medium: <span id="mediumCount"></span></p>
+        <p>Low: <span id="lowCount"></span></p>
+        <p>Informational: <span id="informationalCount"></span></p>
+    </div>
+
+    <!-- Findings Display Area -->
+    <div id="findingsDisplay" class="d-none">
+        <h3 class="section-title">Detailed Findings</h3>
+        <div id="findingsContent"></div>
+    </div>
+
+    <!-- Print Button -->
+    <button id="printButton" class="btn btn-secondary mt-4" onclick="window.print()">Print Report</button>
+
+    <!-- Footer with Page Number -->
+    <div class="page-footer">
+        Page <span class="page-number"></span>
+    </div>
+</div>
+
+<script>
+// API configuration
+const API_BASE_URL = "https://demo.defectdojo.org/api/v2";  // Replace with your actual base URL
+const API_TOKEN = "YOUR_API_TOKEN";  // Replace with your actual API token
+
+// Fetch findings associated with a specific Test ID
+async function fetchFindings() {
+    const testId = document.getElementById("testId").value;
+    if (!testId) {
+        alert("Please enter a Test ID");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/findings/?test=${testId}`, {
+            headers: {
+                "Authorization": `Token ${API_TOKEN}`
+            }
+        });
+        const findingData = await response.json();
+
+        displayFindings(findingData.results);
+        displaySummary(findingData.results);
+    } catch (error) {
+        console.error("Error fetching findings:", error);
+        alert("An error occurred while fetching findings.");
+    }
+}
+
+// Display summary and pie chart of findings by severity
+function displaySummary(findings) {
+    const severityCount = {
+        Critical: 0,
+        High: 0,
+        Medium: 0,
+        Low: 0,
+        Informational: 0
+    };
+
+    findings.forEach(finding => {
+        const severity = finding.severity || "Informational";
+        severityCount[severity]++;
+    });
+
+    document.getElementById("criticalCount").innerText = severityCount.Critical;
+    document.getElementById("highCount").innerText = severityCount.High;
+    document.getElementById("mediumCount").innerText = severityCount.Medium;
+    document.getElementById("lowCount").innerText = severityCount.Low;
+    document.getElementById("informationalCount").innerText = severityCount.Informational;
+    document.getElementById("totalFindings").innerText = findings.length;
+
+    new Chart(document.getElementById("severityChart"), {
+        type: "pie",
+        data: {
+            labels: ["Critical", "High", "Medium", "Low", "Informational"],
+            datasets: [{
+                data: Object.values(severityCount),
+                backgroundColor: ["#dc3545", "#fd7e14", "#ffc107", "#28a745", "#17a2b8"]
+            }]
+        },
+        options: { responsive: true }
+    });
+
+    document.getElementById("reportHeader").classList.remove("d-none");
+}
+
+// Display findings details in structured paragraphs
+function displayFindings(findings) {
+    const findingsDisplay = document.getElementById("findingsDisplay");
+    const findingsContent = document.getElementById("findingsContent");
+
+    findingsContent.innerHTML = "";  // Clear previous findings
+
+    findings.forEach(finding => {
+        const detailsHTML = `
+            <div class="finding-detail">
+                <h5 class="text-dark">Title: ${finding.title || "N/A"}</h5>
+                <p><strong>Severity:</strong> ${finding.severity || "N/A"}</p>
+                <p><strong>CVSSv3 Score:</strong> ${finding.cvssv3_score || "N/A"}</p>
+                <p><strong>Reporter:</strong> ${finding.reporter || "N/A"}</p>
+                <p><strong>Vulnerability IDs:</strong> ${finding.vulnerability_ids || "N/A"}</p>
+                <p><strong>Description:</strong> ${finding.description || "N/A"}</p>
+                <p><strong>Mitigation:</strong> ${finding.mitigation || "N/A"}</p>
+                <p><strong>Impact:</strong> ${finding.impact || "N/A"}</p>
+                <p><strong>Steps to Reproduce:</strong> ${getProofOfConceptImages(finding.steps_to_reproduce)}</p>
+            </div>
+        `;
+        findingsContent.innerHTML += detailsHTML;
+    });
+
+    findingsDisplay.classList.remove("d-none");
+}
+
+// Extract and display proof of concept images from URLs in steps to reproduce text
+function getProofOfConceptImages(steps) {
+    const proofLinkPattern = /https?:\/\/[^\s)]+/g;
+    const proofLinks = steps.match(proofLinkPattern);
+
+    if (proofLinks) {
+        return proofLinks.map(link => `<a href="${link}" target="_blank"><img src="${link}" alt="Proof of Concept" class="proof-image"></a>`).join("");
+    }
+    return "N/A";
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js"></script>
+</body>
+</html>
