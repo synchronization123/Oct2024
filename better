@@ -1,0 +1,52 @@
+import openpyxl
+from openpyxl.styles import PatternFill
+
+# Input and output filenames
+data_filename = "DATA.xlsx"
+usernames_filename = "usernames.xlsx"
+output_filename = "finalreport.xlsx"
+
+# Load the workbooks
+data_wb = openpyxl.load_workbook(data_filename)
+usernames_wb = openpyxl.load_workbook(usernames_filename)
+
+# Load the first sheet from each workbook
+data_ws = data_wb.active
+usernames_ws = usernames_wb.active
+
+# Get the list of keywords from usernames.xlsx (excluding "request")
+keywords = [
+    cell.value.strip() for cell in usernames_ws["A"] if cell.value and cell.value.strip().lower() != "request"
+]
+
+# Define fills for highlighting
+yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+red_fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+
+# Find the "Issue Key" column (assuming the first row contains headers)
+issue_key_column = None
+for col in data_ws.iter_cols(min_row=1, max_row=1, min_col=1, max_col=data_ws.max_column):
+    if col[0].value and col[0].value.lower() == "issue key":
+        issue_key_column = col[0].column
+        break
+
+if not issue_key_column:
+    raise ValueError("The 'Issue Key' column was not found in DATA.xlsx.")
+
+# Iterate over all cells in the data worksheet
+for row in data_ws.iter_rows(min_row=2, max_row=data_ws.max_row, min_col=1, max_col=data_ws.max_column):
+    for cell in row:
+        if cell.value and isinstance(cell.value, str):
+            # Check if the cell value contains any keyword
+            if not any(keyword.lower() in cell.value.lower() for keyword in keywords):
+                # Highlight the current cell in yellow
+                cell.fill = yellow_fill
+                
+                # Highlight the associated Issue Key cell in red
+                issue_key_cell = row[issue_key_column - 1]
+                issue_key_cell.fill = red_fill
+
+# Save the modified data to finalreport.xlsx
+data_wb.save(output_filename)
+
+print(f"Highlighting complete. The updated file is saved as '{output_filename}'.")
