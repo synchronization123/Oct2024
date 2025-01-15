@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keyword Scanner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .progress-bar {
+            transition: width 0.4s ease;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        select.form-control {
+            display: inline-block;
+            margin-bottom: 10px;
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h3 class="text-center">Keyword Scanner</h3>
+
+    <!-- Input for Keywords -->
+    <div class="input-group">
+        <textarea id="keywordInput" class="form-control" placeholder="Enter keywords, separated by commas"></textarea>
+    </div>
+
+    <!-- Folder Selection, Search Button, and Export Button -->
+    <div class="input-group">
+        <input type="file" id="folderInput" webkitdirectory directory class="form-control-file">
+        <button class="btn btn-primary" onclick="startScan()">Search</button>
+        <button class="btn btn-success ml-2" onclick="exportToExcel()">Export to Excel</button>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress my-3">
+        <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%" aria-valuemin="0" aria-valuemax="100">0%</div>
+    </div>
+
+    <!-- DataTable to Display Scanned Data -->
+    <table id="scanResults">
+        <thead>
+            <tr>
+                <th>Keyword Matched</th>
+                <th>File Name</th>
+                <th>Line Number</th>
+                <th>File Path</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Scanned results will appear here -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+    let dataTable = null;
+
+    // Initialize the DataTable
+    function initializeDataTable() {
+        const table = document.getElementById("scanResults");
+        dataTable = table.getElementsByTagName("tbody")[0];
+    }
+
+    // Start Scanning Function
+    function startScan() {
+        let keywords = document.getElementById('keywordInput').value.toLowerCase().split(',').map(word => word.trim());
+        let files = document.getElementById('folderInput').files;
+        let totalFiles = files.length;
+        let progress = 0;
+
+        if (totalFiles === 0 || keywords.length === 0) {
+            alert("Please select a folder and enter keywords.");
+            return;
+        }
+
+        let progressBar = document.getElementById('progressBar');
+        progressBar.style.width = '0%';
+        progressBar.innerText = '0%';
+
+        dataTable.innerHTML = '';
+
+        Array.from(files).forEach((file, index) => {
+            let reader = new FileReader();
+            reader.onload = function(event) {
+                let lines = event.target.result.split('\n');
+                let matchFound = false;
+
+                lines.forEach((line, lineNumber) => {
+                    keywords.forEach(keyword => {
+                        if (line.toLowerCase().includes(keyword)) {
+                            matchFound = true;
+                            addToTable(keyword, file.name, lineNumber + 1, file.webkitRelativePath);
+                        }
+                    });
+                });
+
+                if (!matchFound) {
+                    addToTable("No keyword matched", file.name, "-", file.webkitRelativePath);
+                }
+
+                progress = ((index + 1) / totalFiles) * 100;
+                progressBar.style.width = progress + '%';
+                progressBar.innerText = Math.floor(progress) + '%';
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    // Add results to DataTable
+    function addToTable(keywordMatched, fileName, lineNumber, filePath) {
+        const row = dataTable.insertRow();
+        row.innerHTML = `
+            <td>${keywordMatched}</td>
+            <td>${fileName}</td>
+            <td>${lineNumber}</td>
+            <td>${filePath}</td>
+        `;
+    }
+
+    // Trigger export to Excel
+    function exportToExcel() {
+        const rows = Array.from(dataTable.rows);
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Keyword Matched,File Name,Line Number,File Path\n";
+
+        rows.forEach(row => {
+            const cells = Array.from(row.cells);
+            const rowData = cells.map(cell => `"${cell.textContent}"`).join(",");
+            csvContent += rowData + "\n";
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "scanned_results.csv");
+        document.body.appendChild(link); // Required for FF
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // Initialize the app on load
+    document.addEventListener("DOMContentLoaded", initializeDataTable);
+</script>
+
+</body>
+</html>
