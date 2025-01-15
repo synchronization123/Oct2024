@@ -1,0 +1,40 @@
+import requests
+import csv
+import pandas as pd
+
+# User inputs
+jira_url = "https://jira.zrm.com/sr/jira.issueviews:searchrequest-xsv-all-fields/tmp/SearchRequest.csv?jqlQuery="
+api_token = "jdjdjdjdjd"
+output_csv = "jiraoutput.csv"
+output_xlsx = "jiraoutput.xlsx"
+
+# Take JQL input from the user and format it
+jql_input = input("Enter your JQL query: ").strip()
+formatted_jql = jql_input.replace(" ", "+")
+
+# Complete URL with the formatted JQL query
+complete_url = jira_url + formatted_jql
+
+# Send GET request to Jira
+headers = {
+    "Authorization": f"Bearer {api_token}"
+}
+response = requests.get(complete_url, headers=headers)
+
+# Check for successful response
+if response.status_code == 200:
+    # Save the response content as a CSV file
+    with open(output_csv, "w", newline='', encoding="utf-8") as file:
+        file.write(response.text)
+    print(f"CSV file saved as {output_csv}")
+    
+    # Convert CSV to Excel
+    try:
+        df = pd.read_csv(output_csv)
+        df.to_excel(output_xlsx, index=False)
+        print(f"Excel file saved as {output_xlsx}")
+    except Exception as e:
+        print(f"Error while converting CSV to Excel: {e}")
+else:
+    print(f"Failed to fetch data from Jira. Status code: {response.status_code}")
+    print(f"Response: {response.text}")
