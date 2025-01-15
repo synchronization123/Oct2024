@@ -1,0 +1,109 @@
+import requests
+import json
+from openpyxl import Workbook, load_workbook
+
+# Helper function for making API calls
+def get_json_data(url, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+# Task 1: Fetch data from Bitbucket API 1 and save to projects_git.xlsx
+def task_1(bitbucket_api1_url, token):
+    data = get_json_data(bitbucket_api1_url, token)
+    projects = data.get("values", [])
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Projects"
+    ws.append(["Key", "Name"])  # Headers
+    
+    for project in projects:
+        ws.append([project["key"], project["name"]])
+    
+    wb.save("projects_git.xlsx")
+    print("Task 1 completed: projects_git.xlsx created.")
+
+# Task 2: Fetch repos for each project key from projects_git.xlsx and save to repos_fit.xlsx
+def task_2(bitbucket_api2_url, token):
+    # Load the project keys from projects_git.xlsx
+    project_wb = load_workbook("projects_git.xlsx")
+    project_ws = project_wb.active
+    
+    # Prepare a new workbook for repositories
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Repos"
+    ws.append(["Repo Name", "Name", "URL"])  # Headers for the repos_fit.xlsx file
+    
+    # Iterate through each key in projects_git.xlsx (Column A)
+    for row in project_ws.iter_rows(min_row=2, max_col=1, values_only=True):
+        key = row[0]  # Column A contains the project keys
+        if not key:
+            continue
+        
+        # Replace {key} in the API URL
+        repos_url = bitbucket_api2_url.format(key=key)
+        print(f"Fetching repositories for project key: {key}")
+        
+        try:
+            data = get_json_data(repos_url, token)
+            repos = data.get("values", [])
+            
+            # Append each repo's slug, name, and URL to the Excel sheet
+            for repo in repos:
+                repo_url = f"https://bitbucket.xrm.com/rest/api/latest/projects/{key}/repos/{repo['slug']}"
+                ws.append([repo["slug"], repo["name"], repo_url])
+        
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching data for key {key}: {e}")
+    
+    # Save the data to repos_fit.xlsx
+    wb.save("repos_fit.xlsx")
+    print("Task 2 completed: repos_fit.xlsx created.")
+
+# Task 4: Fetch data from Sonar API and save to sonarprojects.xlsx
+def task_4(sonar_api_url, token):
+    data = get_json_data(sonar_api_url, token)
+    
+    # Ensure we extract "components" correctly
+    components = data.get("components", [])
+    
+    # Prepare the Excel workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sonar Projects"
+    ws.append(["Key", "Name", "Analysis Date"])  # Headers
+
+    # Iterate through components and extract the required data
+    for component in components:
+        key = component.get("key", "")
+        name = component.get("name", "")
+        analysis_date = component.get("analysisDate", "").split("T")[0]  # Extract date only (YYYY-MM-DD)
+        
+        # Append row only if key and name are present
+        if key and name:
+            ws.append([key, name, analysis_date])
+    
+    # Save the workbook
+    wb.save("sonarprojects.xlsx")
+    print("Task 4 completed: sonarprojects.xlsx created.")
+
+# Main function to execute tasks
+def main():
+    # API URLs and Tokens
+    bitbucket_api1_url = "https://bitbucket.xrm.com/rest/api/latest/projects?limit=1000"
+    bitbucket_api2_url = "https://bitbucket.xrm.com/rest/api/latest/projects/{key}/repos?limit=1000"
+    sonar_api_url = "https://sonar.xrm.com/api/components/search_projects?f=analysisDate&ps=500"
+    
+    bitbucket_token = "hdjdjdjd"
+    sonar_token = "jdjdjdkjd"
+    
+    # Execute tasks
+    task_1(bitbucket_api1_url, bitbucket_token)
+    task_2(bitbucket_api2_url, bitbucket_token)
+    task_4(sonar_api_url, sonar_token)
+
+if __name__ == "__main__":
+    main()
