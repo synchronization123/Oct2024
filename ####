@@ -1,0 +1,64 @@
+import requests
+import pandas as pd
+import os
+
+# User inputs
+jira_url = "https://jira.zrm.com/sr/jira.issueviews:searchrequest-xsv-all-fields/tmp/SearchRequest.csv?jqlQuery="
+api_token = "jdjdjdjdjd"
+output_csv = "jiraoutput.csv"
+output_xlsx = "jiraoutput.xlsx"
+batch_size = 1000  # Maximum issues per batch
+
+# Take JQL input from the user and format it
+jql_input = input("Enter your JQL query: ").strip()
+formatted_jql = jql_input.replace(" ", "+")  # Replace blanks with '+'
+
+# Function to fetch a batch of issues
+def fetch_issues(start_index):
+    complete_url = f"{jira_url}{formatted_jql}&tempMax={batch_size}&pager/start={start_index}"
+    headers = {"Authorization": f"Bearer {api_token}"}
+    response = requests.get(complete_url, headers=headers)
+
+    if response.status_code == 200:
+        return response.text
+    else:
+        print(f"Failed to fetch batch starting at {start_index}. Status code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return None
+
+# Main logic to fetch all issues in batches
+batch_start = 0
+temp_files = []
+while True:
+    print(f"Fetching issues starting from index {batch_start}...")
+    data = fetch_issues(batch_start)
+    if data:
+        temp_file = f"temp_{batch_start}.csv"
+        with open(temp_file, "w", encoding="utf-8") as file:
+            file.write(data)
+        temp_files.append(temp_file)
+        # Check if the batch is less than the batch size, indicating the last batch
+        if len(data.splitlines()) <= batch_size:
+            break
+        batch_start += batch_size
+    else:
+        break
+
+# Merge all temporary CSV files into one
+if temp_files:
+    print("Merging all batches into a single CSV file...")
+    combined_df = pd.concat([pd.read_csv(f) for f in temp_files], ignore_index=True)
+    combined_df.to_csv(output_csv, index=False)
+    print(f"All batches merged into {output_csv}")
+    
+    # Convert the combined CSV to Excel
+    print("Converting merged CSV to Excel...")
+    combined_df.to_excel(output_xlsx, index=False)
+    print(f"Excel file saved as {output_xlsx}")
+    
+    # Clean up temporary files
+    print("Cleaning up temporary files...")
+    for temp_file in temp_files:
+        os.remove(temp_file)
+else:
+    print("No data was fetched. Please check your JQL query or API token.")
